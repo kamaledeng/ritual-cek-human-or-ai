@@ -186,10 +186,10 @@ export default function Home() {
     [tweetUrl, tweetText]
   );
 
-  async function onSubmit() {
+  async function onSubmit(force = false) {
     setError(null);
     // Prevent "result changes every click" when input doesn't change.
-    if (lastKey && currentKey === lastKey && result) return;
+    if (!force && lastKey && currentKey === lastKey && result) return;
 
     if (!canSubmit) {
       setError("Please paste the text first.");
@@ -299,13 +299,23 @@ export default function Home() {
             </label>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <button
-                onClick={onSubmit}
-                disabled={!canSubmit || loading}
-                className="inline-flex h-11 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900"
-              >
-                {loading ? "Analyzing…" : "Analyze"}
-              </button>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <button
+                  onClick={() => onSubmit(false)}
+                  disabled={!canSubmit || loading}
+                  className="inline-flex h-11 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900"
+                >
+                  {loading ? "Analyzing…" : "Analyze"}
+                </button>
+                <button
+                  onClick={() => onSubmit(true)}
+                  disabled={!canSubmit || loading}
+                  className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900 transition disabled:cursor-not-allowed disabled:opacity-60 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-50 dark:hover:bg-zinc-900"
+                  title="Force a fresh analysis even if the input hasn't changed"
+                >
+                  Re-analyze
+                </button>
+              </div>
             </div>
 
             {error ? (
