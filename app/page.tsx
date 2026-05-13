@@ -15,10 +15,41 @@ function clamp0to100(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-function countWords(text: string): number {
-  const t = text.trim();
-  if (!t) return 0;
-  return t.split(/\s+/).filter(Boolean).length;
+type HistoryItem = {
+  id: string;
+  tweetUrl: string;
+  text: string;
+  createdAt: number;
+  result: AnalyzeResult;
+};
+
+const HISTORY_KEY = "ritual_history_v1";
+const HISTORY_MAX = 20;
+
+function loadHistory(): HistoryItem[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(Boolean)
+      .slice(0, HISTORY_MAX) as HistoryItem[];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(items: HistoryItem[]) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, HISTORY_MAX)));
+  } catch {
+    // ignore
+  }
+}
+
+function makeKey(tweetUrl: string, text: string) {
+  return `${tweetUrl.trim()}\n${text.trim()}`;
 }
 
 function labelToText(label: AnalyzeResult["label"]) {
@@ -143,13 +174,22 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalyzeResult | null>(null);
+  const [lastKey, setLastKey] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    if (typeof window === "undefined") return [];
+    return loadHistory();
+  });
 
   const canSubmit = useMemo(() => tweetText.trim().length > 0, [tweetText]);
-  const wordCount = useMemo(() => countWords(tweetText), [tweetText]);
+  const currentKey = useMemo(
+    () => makeKey(tweetUrl, tweetText),
+    [tweetUrl, tweetText]
+  );
 
   async function onSubmit() {
     setError(null);
-    setResult(null);
+    // Prevent "result changes every click" when input doesn't change.
+    if (lastKey && currentKey === lastKey && result) return;
 
     if (!canSubmit) {
       setError("Please paste the text first.");
@@ -176,11 +216,48 @@ export default function Home() {
         return;
       }
 
-      setResult(data as AnalyzeResult);
+      const next = data as AnalyzeResult;
+      setResult(next);
+      setLastKey(currentKey);
+
+      const item: HistoryItem = {
+        id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+        tweetUrl: tweetUrl.trim(),
+        text: tweetText.trim(),
+        createdAt: Date.now(),
+        result: next,
+      };
+      const updated = [item, ...history].slice(0, HISTORY_MAX);
+      setHistory(updated);
+      saveHistory(updated);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function onCopy() {
+    if (!result) return;
+    void navigator.clipboard
+      .writeText(JSON.stringify(result, null, 2))
+      .catch(() => setError("Failed to copy."));
+  }
+
+  function onLoadFromHistory(item: HistoryItem) {
+    setTweetUrl(item.tweetUrl);
+    setTweetText(item.text);
+    setResult(item.result);
+    setLastKey(makeKey(item.tweetUrl, item.text));
+    setError(null);
+  }
+
+  function onClearHistory() {
+    setHistory([]);
+    try {
+      localStorage.removeItem(HISTORY_KEY);
+    } catch {
+      // ignore
     }
   }
 
@@ -219,20 +296,7 @@ export default function Home() {
                 placeholder="Paste the text here…"
                 className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:focus:ring-zinc-700"
               />
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                Note: this app does not fetch tweet content from X automatically (API access is limited),
-                so please paste the text manually.
-              </span>
             </label>
-
-            {wordCount > 0 && wordCount < 100 ? (
-              <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-100">
-                <span className="mt-0.5">⚠</span>
-                <div>
-                  This text is under 100 words, which means the result may be less accurate.
-                </div>
-              </div>
-            ) : null}
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <button
@@ -242,9 +306,6 @@ export default function Home() {
               >
                 {loading ? "Analyzing…" : "Analyze"}
               </button>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Your Mistral API key is stored server-side (env) and never exposed in the browser.
-              </p>
             </div>
 
             {error ? (
@@ -281,15 +342,16 @@ export default function Home() {
                               >
                                 {labelToText(result.label)}
                               </span>
-                              <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                                AI likelihood score:{" "}
-                                <span className="tabular-nums font-medium">
-                                  {clamp0to100(result.ai_likelihood)}
-                                </span>
-                                /100
-                              </span>
                             </div>
                           </div>
+                        </div>
+                        <div className="flex gap-2 sm:justify-end">
+                          <button
+                            onClick={onCopy}
+                            className="inline-flex h-9 items-center justify-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+                          >
+                            Copy JSON
+                          </button>
                         </div>
                       </div>
 
@@ -354,14 +416,43 @@ export default function Home() {
                 </div>
               </div>
             ) : null}
+
+            <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">History</p>
+                <button
+                  onClick={onClearHistory}
+                  className="text-xs text-zinc-600 hover:underline dark:text-zinc-300"
+                  type="button"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="mt-3 grid gap-2">
+                {history.slice(0, 8).map((h) => (
+                    <button
+                      key={h.id}
+                      type="button"
+                      onClick={() => onLoadFromHistory(h)}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900/40 dark:hover:bg-zinc-900"
+                    >
+                      <span className="truncate">
+                        {h.text.length > 60 ? `${h.text.slice(0, 60)}…` : h.text}
+                      </span>
+                      <span className="shrink-0 rounded-full border px-2 py-0.5 text-[11px] dark:border-zinc-700">
+                        {labelToBadge(h.result.label)}
+                      </span>
+                    </button>
+                  ))}
+                {!history.length ? (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Belum ada history.
+                  </p>
+                ) : null}
+              </div>
+            </div>
           </div>
         </section>
-
-        <footer className="mt-6 text-xs text-zinc-500 dark:text-zinc-400">
-          Disclaimer: this is probabilistic analysis. For higher confidence, you
-          need additional context (author history, source material, creation
-          proof, etc.).
-        </footer>
       </main>
     </div>
   );

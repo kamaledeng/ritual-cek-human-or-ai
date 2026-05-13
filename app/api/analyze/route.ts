@@ -96,7 +96,8 @@ export async function POST(req: Request) {
     },
     body: JSON.stringify({
       model,
-      temperature: 0.2,
+      // Make responses as stable as possible across repeated requests.
+      temperature: 0,
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
