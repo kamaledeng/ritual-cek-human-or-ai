@@ -18,6 +18,7 @@ npm install
 - Fill `MISTRAL_API_KEY` (never commit real keys)
 - (recommended) Pin `MISTRAL_MODEL` to a fixed model name for long-term stability (avoid `*-latest`)
 - (optional) Adjust request limits: `MAX_TEXT_CHARS`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_SEC`
+- (optional) Enable best-effort server cache: `ENABLE_SERVER_CACHE`, `CACHE_TTL_SEC`, `CACHE_MAX_ENTRIES`
 
 3. Start dev server
 
@@ -37,6 +38,9 @@ Open `http://localhost:3000`.
    - (optional) `RATE_LIMIT_MAX` = `30`
    - (optional) `RATE_LIMIT_WINDOW_SEC` = `60`
    - (optional) `NEXT_PUBLIC_MAX_TEXT_CHARS` = `10000` (textarea limit)
+   - (optional) `ENABLE_SERVER_CACHE` = `true`
+   - (optional) `CACHE_TTL_SEC` = `3600`
+   - (optional) `CACHE_MAX_ENTRIES` = `500`
 3. Deploy
 
 ## API endpoint

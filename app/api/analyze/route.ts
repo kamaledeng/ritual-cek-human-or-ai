@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 
 type AnalyzeRequestBody = {
   text?: string;
   tweet_url?: string;
+  force?: boolean;
 };
 
 type AnalyzeResult = {
@@ -43,6 +45,22 @@ function safeJsonParse<T>(value: string): T | null {
   } catch {
     return null;
   }
+}
+
+function extractFirstJsonObject(text: string): string | null {
+  // Extract the first {...} block (best-effort) in case the model adds extra text.
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
 }
 
 function getClientIp(req: Request): string {
@@ -90,6 +108,54 @@ function checkRateLimit(ip: string) {
   return { allowed: true, remaining: max - entry.count, resetAt: entry.resetAt };
 }
 
+type CacheEntry = { result: AnalyzeResult; expiresAt: number };
+
+function getCacheConfig() {
+  const ttlSec = Number(process.env.CACHE_TTL_SEC ?? "3600");
+  const maxEntries = Number(process.env.CACHE_MAX_ENTRIES ?? "500");
+  const enabled = (process.env.ENABLE_SERVER_CACHE ?? "true").toLowerCase() !== "false";
+  return {
+    enabled,
+    ttlMs: Number.isFinite(ttlSec) && ttlSec > 0 ? ttlSec * 1000 : 3600_000,
+    maxEntries: Number.isFinite(maxEntries) && maxEntries > 0 ? maxEntries : 500,
+  };
+}
+
+function getCache() {
+  const g = globalThis as unknown as { __ritualCache?: Map<string, CacheEntry> };
+  if (!g.__ritualCache) g.__ritualCache = new Map();
+  return g.__ritualCache;
+}
+
+function cacheKey(parts: string[]) {
+  return crypto.createHash("sha256").update(parts.join("\n")).digest("hex");
+}
+
+function cacheGet(key: string): AnalyzeResult | null {
+  const { enabled } = getCacheConfig();
+  if (!enabled) return null;
+  const cache = getCache();
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.result;
+}
+
+function cacheSet(key: string, result: AnalyzeResult) {
+  const { enabled, ttlMs, maxEntries } = getCacheConfig();
+  if (!enabled) return;
+  const cache = getCache();
+  if (cache.size >= maxEntries) {
+    // Evict oldest (Map keeps insertion order)
+    const oldestKey = cache.keys().next().value as string | undefined;
+    if (oldestKey) cache.delete(oldestKey);
+  }
+  cache.set(key, { result, expiresAt: Date.now() + ttlMs });
+}
+
 export async function POST(req: Request) {
   const apiKey = process.env.MISTRAL_API_KEY;
   const model = process.env.MISTRAL_MODEL ?? "mistral-small-latest";
@@ -111,6 +177,7 @@ export async function POST(req: Request) {
 
   const text = (body?.text ?? "").trim();
   const tweetUrl = (body?.tweet_url ?? "").trim();
+  const force = Boolean(body?.force);
 
   if (!text) {
     return NextResponse.json(
@@ -134,6 +201,13 @@ export async function POST(req: Request) {
       { error: "Rate limit exceeded. Please try again later." },
       { status: 429 }
     );
+  }
+
+  const promptVersion = "v2-conservative-json"; // bump if prompt/output schema changes
+  const key = cacheKey([promptVersion, model, tweetUrl, text]);
+  if (!force) {
+    const cached = cacheGet(key);
+    if (cached) return NextResponse.json(cached);
   }
 
   // Force the model to return raw JSON (no markdown).
@@ -209,7 +283,11 @@ export async function POST(req: Request) {
   }
 
   // Coba parse JSON dari model. Kalau gagal, fallback ke hasil default.
-  const parsed = safeJsonParse<AnalyzeModelOutput>(content.trim());
+  const trimmed = content.trim();
+  const jsonOnly = safeJsonParse<AnalyzeModelOutput>(trimmed)
+    ? trimmed
+    : extractFirstJsonObject(trimmed) ?? trimmed;
+  const parsed = safeJsonParse<AnalyzeModelOutput>(jsonOnly);
 
   const rawScore = clamp0to100(Number(parsed?.ai_likelihood ?? 50));
   const rawConfidence = clamp0to100(
@@ -258,5 +336,6 @@ export async function POST(req: Request) {
     ];
   }
 
+  cacheSet(key, result);
   return NextResponse.json(result);
 }

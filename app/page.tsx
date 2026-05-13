@@ -206,6 +206,7 @@ export default function Home() {
         body: JSON.stringify({
           tweet_url: tweetUrl.trim() || undefined,
           text: tweetText.trim(),
+          force,
         }),
       });
 
