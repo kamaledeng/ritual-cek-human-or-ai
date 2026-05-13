@@ -10,6 +10,28 @@ type AnalyzeResult = {
   model?: string;
 };
 
+function labelToText(label: AnalyzeResult["label"]) {
+  switch (label) {
+    case "likely_ai":
+      return "Likely AI";
+    case "likely_human":
+      return "Likely Human";
+    default:
+      return "Uncertain";
+  }
+}
+
+function labelClasses(label: AnalyzeResult["label"]) {
+  switch (label) {
+    case "likely_ai":
+      return "border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-200";
+    case "likely_human":
+      return "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-200";
+    default:
+      return "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/40 dark:text-amber-200";
+  }
+}
+
 export default function Home() {
   const [tweetUrl, setTweetUrl] = useState("");
   const [tweetText, setTweetText] = useState("");
@@ -24,7 +46,7 @@ export default function Home() {
     setResult(null);
 
     if (!canSubmit) {
-      setError("Masukkan teks tweet dulu ya.");
+      setError("Please paste the text first.");
       return;
     }
 
@@ -43,14 +65,14 @@ export default function Home() {
       if (!res.ok) {
         setError(
           (data && (data.error as string)) ||
-            `Gagal memproses (HTTP ${res.status}).`
+            `Request failed (HTTP ${res.status}).`
         );
         return;
       }
 
       setResult(data as AnalyzeResult);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Terjadi error.");
+      setError(e instanceof Error ? e.message : "Something went wrong.");
     } finally {
       setLoading(false);
     }
@@ -61,20 +83,19 @@ export default function Home() {
       <main className="mx-auto w-full max-w-3xl px-4 py-10">
         <header className="mb-8">
           <h1 className="text-2xl font-semibold tracking-tight">
-            Ritual — Cek Human atau AI
+            Ritual — Human or AI Checker
           </h1>
           <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-            Masukkan teks tweet (dari link X/Twitter) lalu dapatkan{" "}
-            <span className="font-medium">perkiraan</span> apakah teksnya
-            terindikasi dibuat AI atau manusia. Hasilnya berupa skor + alasan,
-            bukan kepastian 100%.
+            Paste a tweet-like text (optionally include its X/Twitter URL) to get an{" "}
+            <span className="font-medium">estimate</span> of whether it is more likely
+            written by a human or by AI. Results are probabilistic, not 100% proof.
           </p>
         </header>
 
         <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
           <div className="grid gap-4">
             <label className="grid gap-2">
-              <span className="text-sm font-medium">Link tweet (opsional)</span>
+              <span className="text-sm font-medium">Tweet URL (optional)</span>
               <input
                 value={tweetUrl}
                 onChange={(e) => setTweetUrl(e.target.value)}
@@ -84,17 +105,17 @@ export default function Home() {
             </label>
 
             <label className="grid gap-2">
-              <span className="text-sm font-medium">Teks tweet</span>
+              <span className="text-sm font-medium">Text</span>
               <textarea
                 value={tweetText}
                 onChange={(e) => setTweetText(e.target.value)}
                 rows={7}
-                placeholder="Paste teks tweet di sini…"
+                placeholder="Paste the text here…"
                 className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:focus:ring-zinc-700"
               />
               <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                Catatan: versi gratis biasanya tidak bisa ambil isi tweet otomatis
-                dari link (karena batasan X). Jadi paste teksnya ya.
+                Note: this app does not fetch tweet content from X automatically (API access is limited),
+                so please paste the text manually.
               </span>
             </label>
 
@@ -104,10 +125,10 @@ export default function Home() {
                 disabled={!canSubmit || loading}
                 className="inline-flex h-11 items-center justify-center rounded-xl bg-zinc-900 px-4 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-50 dark:text-zinc-900"
               >
-                {loading ? "Memproses…" : "Cek sekarang"}
+                {loading ? "Analyzing…" : "Analyze"}
               </button>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                API key Mistral disimpan di server (env), tidak muncul di browser.
+                Your Mistral API key is stored server-side (env) and never exposed in the browser.
               </p>
             </div>
 
@@ -121,22 +142,42 @@ export default function Home() {
               <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                   <div>
-                    <p className="text-sm font-medium">Hasil</p>
+                    <p className="text-sm font-medium">Result</p>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">
                       Model: {result.model ?? "mistral-small-latest"}
                     </p>
                   </div>
-                  <div className="text-sm">
-                    <span className="font-medium">Skor AI:</span>{" "}
-                    <span className="tabular-nums">{result.ai_likelihood}</span>
-                    /100 •{" "}
-                    <span className="font-medium">Label:</span> {result.label}
+                  <div className="flex flex-col items-start gap-2 sm:items-end">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${labelClasses(
+                          result.label
+                        )}`}
+                      >
+                        {labelToText(result.label)}
+                      </span>
+                      <span className="text-sm">
+                        <span className="font-medium">AI likelihood:</span>{" "}
+                        <span className="tabular-nums">
+                          {result.ai_likelihood}
+                        </span>
+                        /100
+                      </span>
+                    </div>
+                    <div className="w-full sm:w-64">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+                        <div
+                          className="h-full rounded-full bg-zinc-900 dark:bg-zinc-50"
+                          style={{ width: `${Math.max(0, Math.min(100, result.ai_likelihood))}%` }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 {tweetUrl.trim() ? (
                   <p className="mt-3 text-xs text-zinc-600 dark:text-zinc-400">
-                    Sumber:{" "}
+                    Source:{" "}
                     <a
                       className="underline"
                       href={tweetUrl.trim()}
@@ -150,7 +191,7 @@ export default function Home() {
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <div>
-                    <p className="text-sm font-medium">Alasan utama</p>
+                    <p className="text-sm font-medium">Key reasons</p>
                     <ul className="mt-2 list-disc pl-5 text-sm text-zinc-700 dark:text-zinc-200">
                       {result.reasons?.map((r, idx) => (
                         <li key={idx}>{r}</li>
@@ -158,7 +199,7 @@ export default function Home() {
                     </ul>
                   </div>
                   <div>
-                    <p className="text-sm font-medium">Saran verifikasi</p>
+                    <p className="text-sm font-medium">Suggested checks</p>
                     <ul className="mt-2 list-disc pl-5 text-sm text-zinc-700 dark:text-zinc-200">
                       {result.suggested_checks?.map((r, idx) => (
                         <li key={idx}>{r}</li>
@@ -172,8 +213,9 @@ export default function Home() {
         </section>
 
         <footer className="mt-6 text-xs text-zinc-500 dark:text-zinc-400">
-          Disclaimer: ini hanya analisis probabilistik. Untuk kepastian, perlu
-          konteks tambahan (sumber, histori akun, bukti proses pembuatan, dsb).
+          Disclaimer: this is probabilistic analysis. For higher confidence, you
+          need additional context (author history, source material, creation
+          proof, etc.).
         </footer>
       </main>
     </div>

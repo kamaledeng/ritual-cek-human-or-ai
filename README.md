@@ -1,10 +1,10 @@
-# Ritual — Cek Human atau AI
+# Ritual — Human or AI Checker
 
-Aplikasi sederhana untuk mengecek **probabilitas** teks tweet “lebih mirip AI atau manusia” menggunakan **Mistral API**.
+A tiny Next.js app that estimates whether a tweet-like text is **more likely written by a human or by AI**, using the **Mistral API**.
 
-Catatan penting: hasilnya *bukan kepastian 100%*. Ini hanya analisis probabilistik dari teks.
+Important: the output is **probabilistic** and not 100% proof.
 
-## Jalanin lokal
+## Run locally
 
 1. Install dependencies
 
@@ -14,35 +14,35 @@ npm install
 
 2. Set env
 
-- Copy `.env.example` jadi `.env.local`
-- Isi `MISTRAL_API_KEY` (jangan pernah commit key asli)
+- Copy `.env.example` to `.env.local`
+- Fill `MISTRAL_API_KEY` (never commit real keys)
 
-3. Run dev server
+3. Start dev server
 
 ```bash
 npm run dev
 ```
 
-Buka `http://localhost:3000`.
+Open `http://localhost:3000`.
 
-## Deploy ke Vercel
+## Deploy on Vercel
 
-1. Import repo ini di Vercel
-2. Set Environment Variables:
-   - `MISTRAL_API_KEY` = API key dari Mistral
-   - (opsional) `MISTRAL_MODEL` = `mistral-small-latest`
+1. Import this repo into Vercel
+2. Add Environment Variables:
+   - `MISTRAL_API_KEY` = your Mistral API key
+   - (optional) `MISTRAL_MODEL` = `mistral-small-latest`
 3. Deploy
 
-## Endpoint
+## API endpoint
 
 - `POST /api/analyze`
 
-Body:
+Request body:
 
 ```json
 {
   "tweet_url": "https://x.com/.../status/123",
-  "text": "paste teks tweet"
+  "text": "paste the text here"
 }
 ```
 

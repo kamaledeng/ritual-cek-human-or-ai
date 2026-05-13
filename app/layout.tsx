@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Ritual — Cek Human atau AI",
-  description: "Cek probabilitas teks tweet dibuat manusia atau AI (Mistral).",
+  title: "Ritual — Human or AI Checker",
+  description: "Estimate whether a tweet-like text is more likely written by a human or AI (Mistral).",
 };
 
 export default function RootLayout({
@@ -24,7 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="id"
+      lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>

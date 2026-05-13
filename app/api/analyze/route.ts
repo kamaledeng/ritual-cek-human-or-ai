@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
   if (!apiKey) {
     return NextResponse.json(
-      { error: "Server belum dikonfigurasi: MISTRAL_API_KEY belum diset." },
+      { error: "Server is not configured: MISTRAL_API_KEY is not set." },
       { status: 500 }
     );
   }
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
   try {
     body = (await req.json()) as AnalyzeRequestBody;
   } catch {
-    return NextResponse.json({ error: "Body JSON tidak valid." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
   const text = (body?.text ?? "").trim();
@@ -49,27 +49,27 @@ export async function POST(req: Request) {
 
   if (!text) {
     return NextResponse.json(
-      { error: "Field 'text' wajib diisi." },
+      { error: "Field 'text' is required." },
       { status: 400 }
     );
   }
 
-  // Prompt dibuat supaya model mengembalikan JSON murni, tanpa markdown.
+  // Force the model to return raw JSON (no markdown).
   const system = [
-    "Kamu adalah asisten forensik teks.",
-    "Tugas: menilai apakah teks berikut lebih mungkin ditulis manusia atau AI.",
-    "Kamu HARUS mengembalikan JSON valid saja (tanpa markdown, tanpa teks lain).",
-    "Skor 0 = sangat mungkin manusia, 100 = sangat mungkin AI.",
-    'Gunakan label: "likely_human", "likely_ai", atau "uncertain".',
-    "Berikan 3-6 alasan dan 3-6 saran verifikasi.",
+    "You are a text forensics assistant.",
+    "Task: estimate whether the following text is more likely written by a human or by AI.",
+    "You MUST output valid JSON only (no markdown, no extra text).",
+    "Score meaning: 0 = very likely human, 100 = very likely AI.",
+    'Use label: "likely_human", "likely_ai", or "uncertain".',
+    "Provide 3-6 reasons and 3-6 suggested verification checks.",
   ].join("\n");
 
   const user = [
-    tweetUrl ? `Sumber (opsional): ${tweetUrl}` : "",
-    "Teks yang dianalisis:",
+    tweetUrl ? `Source (optional): ${tweetUrl}` : "",
+    "Text to analyze:",
     text,
     "",
-    "Format output (JSON):",
+    "Output format (JSON):",
     "{",
     '  "ai_likelihood": 0,',
     '  "label": "uncertain",',
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "Gagal memanggil Mistral API. Cek API key / limit / model yang dipakai.",
+          "Failed to call Mistral API. Check your API key, rate limits, and selected model.",
         detail: errorText?.slice(0, 2000) || undefined,
       },
       { status: 502 }
@@ -113,7 +113,7 @@ export async function POST(req: Request) {
 
   if (!content || typeof content !== "string") {
     return NextResponse.json(
-      { error: "Respons Mistral tidak sesuai format yang diharapkan." },
+      { error: "Unexpected response format from Mistral." },
       { status: 502 }
     );
   }
@@ -134,16 +134,15 @@ export async function POST(req: Request) {
   // Minimal hygiene: pastikan ada isi.
   if (!result.reasons.length) {
     result.reasons = [
-      "Tidak ada cukup indikator kuat dari teks saja; perlu konteks tambahan.",
+      "Not enough strong indicators from text alone; additional context is needed.",
     ];
   }
   if (!result.suggested_checks.length) {
     result.suggested_checks = [
-      "Bandingkan dengan gaya tulisan akun dari postingan lain.",
-      "Minta bukti proses pembuatan (draft, rekaman, sumber referensi).",
+      "Compare with the author's writing style across other posts.",
+      "Ask for creation proof (drafts, notes, sources, timestamps).",
     ];
   }
 
   return NextResponse.json(result);
 }
-
