@@ -11,6 +11,8 @@ type AnalyzeResult = {
   reasons: string[];
   suggested_checks: string[];
   model?: string;
+  confidence?: number; // 0-100 (optional; higher = more confident)
+  confidence_category?: "low" | "medium" | "high";
 };
 
 type MistralChatCompletionResponse = {
@@ -19,6 +21,15 @@ type MistralChatCompletionResponse = {
       content?: string;
     };
   }>;
+};
+
+type AnalyzeModelOutput = {
+  ai_likelihood?: number;
+  label?: AnalyzeResult["label"];
+  reasons?: unknown;
+  suggested_checks?: unknown;
+  confidence?: number;
+  confidence_category?: AnalyzeResult["confidence_category"];
 };
 
 function clamp0to100(n: number): number {
@@ -133,6 +144,11 @@ export async function POST(req: Request) {
     "Score meaning: 0 = very likely human, 100 = very likely AI.",
     'Use label: "likely_human", "likely_ai", or "uncertain".',
     "Provide 3-6 reasons and 3-6 suggested verification checks.",
+    "",
+    "Be conservative: false positives are harmful.",
+    "Only use 'likely_ai' or 'likely_human' when there are strong indicators in the text itself.",
+    "If evidence is weak, return label 'uncertain' and keep ai_likelihood near 50.",
+    "Also output a confidence score (0-100) and confidence_category ('low'|'medium'|'high').",
   ].join("\n");
 
   const user = [
@@ -144,6 +160,8 @@ export async function POST(req: Request) {
     "{",
     '  "ai_likelihood": 0,',
     '  "label": "uncertain",',
+    '  "confidence": 0,',
+    '  "confidence_category": "low",',
     '  "reasons": ["..."],',
     '  "suggested_checks": ["..."]',
     "}",
@@ -191,15 +209,39 @@ export async function POST(req: Request) {
   }
 
   // Coba parse JSON dari model. Kalau gagal, fallback ke hasil default.
-  const parsed = safeJsonParse<AnalyzeResult>(content.trim());
+  const parsed = safeJsonParse<AnalyzeModelOutput>(content.trim());
+
+  const rawScore = clamp0to100(Number(parsed?.ai_likelihood ?? 50));
+  const rawConfidence = clamp0to100(
+    Number(parsed?.confidence ?? Math.abs(rawScore - 50) * 2)
+  );
+
+  // If confidence is low, pull score towards 50 to reduce false positives.
+  const adjustedScore = clamp0to100(
+    50 + (rawScore - 50) * (rawConfidence / 100)
+  );
+
+  const labelFromScore = (score: number, confidence: number): AnalyzeResult["label"] => {
+    if (confidence < 55) return "uncertain";
+    if (score >= 65) return "likely_ai";
+    if (score <= 35) return "likely_human";
+    return "uncertain";
+  };
+
+  const confidenceCategory: AnalyzeResult["confidence_category"] =
+    rawConfidence >= 80 ? "high" : rawConfidence >= 55 ? "medium" : "low";
 
   const result: AnalyzeResult = {
-    ai_likelihood: clamp0to100(parsed?.ai_likelihood ?? 50),
-    label: parsed?.label ?? "uncertain",
-    reasons: Array.isArray(parsed?.reasons) ? parsed!.reasons.slice(0, 8) : [],
-    suggested_checks: Array.isArray(parsed?.suggested_checks)
-      ? parsed!.suggested_checks.slice(0, 8)
+    ai_likelihood: adjustedScore,
+    label: labelFromScore(adjustedScore, rawConfidence),
+    reasons: Array.isArray(parsed?.reasons)
+      ? (parsed!.reasons as string[]).slice(0, 8)
       : [],
+    suggested_checks: Array.isArray(parsed?.suggested_checks)
+      ? (parsed!.suggested_checks as string[]).slice(0, 8)
+      : [],
+    confidence: rawConfidence,
+    confidence_category: confidenceCategory,
     model,
   };
 
