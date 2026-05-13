@@ -13,6 +13,14 @@ type AnalyzeResult = {
   model?: string;
 };
 
+type MistralChatCompletionResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
+  }>;
+};
+
 function clamp0to100(n: number): number {
   if (!Number.isFinite(n)) return 50;
   return Math.max(0, Math.min(100, Math.round(n)));
@@ -108,7 +116,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const payload = (await upstream.json()) as any;
+  const payload = (await upstream.json()) as MistralChatCompletionResponse;
   const content: string | undefined = payload?.choices?.[0]?.message?.content;
 
   if (!content || typeof content !== "string") {
