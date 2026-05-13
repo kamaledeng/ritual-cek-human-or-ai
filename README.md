@@ -16,6 +16,8 @@ npm install
 
 - Copy `.env.example` to `.env.local`
 - Fill `MISTRAL_API_KEY` (never commit real keys)
+- (recommended) Pin `MISTRAL_MODEL` to a fixed model name for long-term stability (avoid `*-latest`)
+- (optional) Adjust request limits: `MAX_TEXT_CHARS`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_SEC`
 
 3. Start dev server
 
@@ -30,7 +32,11 @@ Open `http://localhost:3000`.
 1. Import this repo into Vercel
 2. Add Environment Variables:
    - `MISTRAL_API_KEY` = your Mistral API key
-   - (optional) `MISTRAL_MODEL` = `mistral-small-latest`
+   - (recommended) `MISTRAL_MODEL` = a fixed model name (avoid `*-latest` if you want consistent results)
+   - (optional) `MAX_TEXT_CHARS` = `10000`
+   - (optional) `RATE_LIMIT_MAX` = `30`
+   - (optional) `RATE_LIMIT_WINDOW_SEC` = `60`
+   - (optional) `NEXT_PUBLIC_MAX_TEXT_CHARS` = `10000` (textarea limit)
 3. Deploy
 
 ## API endpoint

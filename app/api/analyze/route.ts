@@ -34,9 +34,55 @@ function safeJsonParse<T>(value: string): T | null {
   }
 }
 
+function getClientIp(req: Request): string {
+  // Best-effort: works behind most proxies (Vercel, etc.)
+  const xf = req.headers.get("x-forwarded-for");
+  if (xf) return xf.split(",")[0]?.trim() || "unknown";
+  const xr = req.headers.get("x-real-ip");
+  if (xr) return xr.trim();
+  return "unknown";
+}
+
+type RateLimitEntry = { count: number; resetAt: number };
+
+function getRateLimitConfig() {
+  const windowSec = Number(process.env.RATE_LIMIT_WINDOW_SEC ?? "60");
+  const max = Number(process.env.RATE_LIMIT_MAX ?? "30");
+  return {
+    windowMs:
+      Number.isFinite(windowSec) && windowSec > 0 ? windowSec * 1000 : 60_000,
+    max: Number.isFinite(max) && max > 0 ? max : 30,
+  };
+}
+
+function checkRateLimit(ip: string) {
+  const { windowMs, max } = getRateLimitConfig();
+  const now = Date.now();
+
+  const g = globalThis as unknown as {
+    __ritualRateLimit?: Map<string, RateLimitEntry>;
+  };
+  if (!g.__ritualRateLimit) g.__ritualRateLimit = new Map();
+
+  const entry = g.__ritualRateLimit.get(ip);
+  if (!entry || entry.resetAt <= now) {
+    g.__ritualRateLimit.set(ip, { count: 1, resetAt: now + windowMs });
+    return { allowed: true, remaining: max - 1, resetAt: now + windowMs };
+  }
+
+  if (entry.count >= max) {
+    return { allowed: false, remaining: 0, resetAt: entry.resetAt };
+  }
+
+  entry.count += 1;
+  g.__ritualRateLimit.set(ip, entry);
+  return { allowed: true, remaining: max - entry.count, resetAt: entry.resetAt };
+}
+
 export async function POST(req: Request) {
   const apiKey = process.env.MISTRAL_API_KEY;
   const model = process.env.MISTRAL_MODEL ?? "mistral-small-latest";
+  const maxTextChars = Number(process.env.MAX_TEXT_CHARS ?? "10000");
 
   if (!apiKey) {
     return NextResponse.json(
@@ -59,6 +105,23 @@ export async function POST(req: Request) {
     return NextResponse.json(
       { error: "Field 'text' is required." },
       { status: 400 }
+    );
+  }
+
+  if (Number.isFinite(maxTextChars) && maxTextChars > 0 && text.length > maxTextChars) {
+    return NextResponse.json(
+      { error: `Text is too long (max ${maxTextChars} characters).` },
+      { status: 413 }
+    );
+  }
+
+  // Basic abuse protection (best-effort in-memory limiter; for stronger protection use KV/Redis).
+  const ip = getClientIp(req);
+  const rl = checkRateLimit(ip);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Rate limit exceeded. Please try again later." },
+      { status: 429 }
     );
   }
 

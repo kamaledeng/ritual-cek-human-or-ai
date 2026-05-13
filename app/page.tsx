@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 
+const MAX_TEXT_CHARS = Number(process.env.NEXT_PUBLIC_MAX_TEXT_CHARS ?? "10000");
+
 type AnalyzeResult = {
   ai_likelihood: number; // 0-100
   label: "likely_ai" | "likely_human" | "uncertain";
@@ -283,6 +285,7 @@ export default function Home() {
                 value={tweetUrl}
                 onChange={(e) => setTweetUrl(e.target.value)}
                 placeholder="https://x.com/.../status/123"
+                maxLength={2048}
                 className="h-11 rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:focus:ring-zinc-700"
               />
             </label>
@@ -294,6 +297,7 @@ export default function Home() {
                 onChange={(e) => setTweetText(e.target.value)}
                 rows={7}
                 placeholder="Paste the text here…"
+                maxLength={Number.isFinite(MAX_TEXT_CHARS) && MAX_TEXT_CHARS > 0 ? MAX_TEXT_CHARS : undefined}
                 className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:focus:ring-zinc-700"
               />
             </label>
